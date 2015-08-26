@@ -10,6 +10,7 @@
 # • Neither authentication nor authorization are required
 import sqlite3
 import unittest
+import datetime
 
 db = None
 
@@ -39,6 +40,18 @@ def userFromEmail(email):
     global db
     row = db.execute("SELECT * FROM user WHERE email=?", (email,)).fetchone()
     return rowToHash(row) if row else { 'error': email + ' is not registered' }
+def addItem(user, due, title):
+    global db
+    c = db.execute("INSERT INTO item VALUES(NULL, ?, ?, ?, CURRENT_TIMESTAMP, 0)",
+        (user, due, title))
+    return { 'id': c.lastrowid }
+def getUserItems(user, done=None):
+    global db
+    sql = "SELECT * FROM item WHERE userid=?"
+    if done != None:
+        sql += ' AND done = ' + ('1' if done else '0')
+    rows = db.execute(sql, (user, )).fetchall()
+    return [rowToHash(row) for row in rows]
 
 class Tests(unittest.TestCase):
     def setUp(self):
@@ -79,6 +92,38 @@ class Tests(unittest.TestCase):
         
         result = userFromEmail('noone@example.com')
         self.assertTrue('error' in result)
+    
+    def test_addItem(self):
+        result = addUser('Démö', 'demo@example.com')
+        userid = result['id']
+        
+        result = addItem(userid, datetime.datetime.utcnow(), 'One')
+        self.assertEqual(result, { 'id': 1 })
+        result = addItem(userid, datetime.datetime.utcnow(), 'Two')
+        self.assertEqual(result, { 'id': 2 })
+        result = addItem(userid, datetime.datetime.utcnow(), 'Two')
+        self.assertEqual(result, { 'id': 3 })
+    
+    def test_getUserItems(self):
+        result = addUser('Démö', 'demo@example.com')
+        userid = result['id']
+        
+        date1 = datetime.datetime.utcnow()
+        addItem(userid, date1, 'One')
+        
+        date2 = datetime.datetime.utcnow()
+        addItem(userid, date1, 'Two')
+        
+        date3 = datetime.datetime.utcnow()
+        addItem(userid, date1, 'Three')
+        
+        result = getUserItems(userid)
+        result.sort(lambda a, b: cmp(a['id'], b['id']))
+        
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0], { 'id': 1, 'userid': userid, 'due': str(date1), 'title': 'One', 'created': result[0]['created'], 'done': 0 })
+        self.assertEqual(result[1], { 'id': 2, 'userid': userid, 'due': str(date2), 'title': 'Two', 'created': result[1]['created'], 'done': 0 })
+        self.assertEqual(result[2], { 'id': 3, 'userid': userid, 'due': str(date3), 'title': 'Three', 'created': result[2]['created'], 'done': 0 })
         
 
 if __name__ == '__main__':
