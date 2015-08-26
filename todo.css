@@ -1,0 +1,78 @@
+@import url(http://fonts.googleapis.com/css?family=Merriweather:400,900);
+@import url(http://fonts.googleapis.com/css?family=Source+Sans+Pro);
+body {
+    width: 720px;
+    margin: 0 auto;
+    color: #444;
+    background: #eee;
+    font: 12pt Source Sans Pro, sans-serif;
+    font-feature-settings: "onum" 1;
+}
+input, button, select { font: inherit; font-feature-settings: inherit; }
+h1 {
+    margin-top: 0;
+    font: 900 72pt Merriweather, serif;
+    text-align: center;
+}
+
+#login {
+    width: 75%;
+    background: #ccc;
+    border: 3px solid #333;
+    margin: 0 auto;
+    text-align: center;
+    font: 900 20pt/1.25 Source Sans Pro, sans-serif;
+    padding: 1em 0;
+}
+#loginError {
+    color: #d44;
+}
+#loginButton, #registerButton, #email, #name {
+    box-sizing: border-box;
+    width: 75%;
+    margin: 5px 0;
+    text-align: center;
+}
+#shade {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    background: #000;
+    opacity: .7;
+}
+#errorBox {
+    background: #fff;
+    font: 20pt/1.25 Merriweather, serif;
+    z-index: 3;
+    position: absolute;
+    width: 50%;
+    height: 30%;
+    left: 25%;
+    top: 35%;
+    box-sizing: border-box;
+    border: 3px solid #333;
+    padding: 1em;
+}
+#nameIndicator {
+    float: right;
+    margin-right: 1em;
+}
+#toolbar { background: #ddd; padding: 1em; border: 1px solid #aaa; }
+#addItem { float: right; padding: 1em ;}
+#year, #date, #month { text-align: center; }
+#title, #well { font: 10pt/1.25 Merriweather, serif; font-feature-setting: "onum" 1; }
+#title {
+    box-sizing: border-box;
+    width: 100%;
+    display: block;
+}
+#dateBox { display: inline-block; text-align: center; }
+#hour, #minute { background: inherit; border: none; padding: .5em; }
+
+.item { padding: .5em 1em; }
+.item .due, .item input[type=checkbox] { margin-right: 1em; }
+.item.overdue { color: #d44; }
+.item:nth-child(2n) { background: #cde; }
