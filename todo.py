@@ -52,6 +52,10 @@ def getUserItems(user, done=None):
         sql += ' AND done = ' + ('1' if done else '0')
     rows = db.execute(sql, (user, )).fetchall()
     return [rowToHash(row) for row in rows]
+def completeItem(id, done=True):
+    global db
+    c = db.execute("UPDATE item SET done = "  + ('1' if done else '0') + " WHERE id=?", (id,))
+    return { } if c.rowcount == 1 else { 'error': 'Item does not exist' }
 
 class Tests(unittest.TestCase):
     def setUp(self):
@@ -104,7 +108,24 @@ class Tests(unittest.TestCase):
         result = addItem(userid, datetime.datetime.utcnow(), 'Two')
         self.assertEqual(result, { 'id': 3 })
     
+    def test_completeItem(self):
+        result = addUser('Démö', 'demo@example.com')
+        userid = result['id']
+        
+        result = addItem(userid, datetime.datetime.utcnow(), 'One')
+        self.assertEqual(result, { 'id': 1 })
+        
+        result = completeItem(1)
+        self.assertEqual(result, { })
+        
+        result = completeItem(2)
+        self.assertTrue('error' in result)
+        
+    
     def test_getUserItems(self):
+        def orderById(a, b):
+            return cmp(a['id'], b['id'])
+            
         result = addUser('Démö', 'demo@example.com')
         userid = result['id']
         
@@ -117,9 +138,46 @@ class Tests(unittest.TestCase):
         date3 = datetime.datetime.utcnow()
         addItem(userid, date1, 'Three')
         
+        # Make sure that all are returned if completion is not an issue
         result = getUserItems(userid)
-        result.sort(lambda a, b: cmp(a['id'], b['id']))
+        result.sort(orderById)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0], { 'id': 1, 'userid': userid, 'due': str(date1), 'title': 'One', 'created': result[0]['created'], 'done': 0 })
+        self.assertEqual(result[1], { 'id': 2, 'userid': userid, 'due': str(date2), 'title': 'Two', 'created': result[1]['created'], 'done': 0 })
+        self.assertEqual(result[2], { 'id': 3, 'userid': userid, 'due': str(date3), 'title': 'Three', 'created': result[2]['created'], 'done': 0 })
         
+        # Complete a task
+        result = completeItem(2)
+        self.assertEqual(result, { })
+        
+        # Get complete
+        result = getUserItems(userid, True)
+        result.sort(orderById)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0], { 'id': 2, 'userid': userid, 'due': str(date2), 'title': 'Two', 'created': result[0]['created'], 'done': 1 })
+        
+        # Get incomplete
+        result = getUserItems(userid, False)
+        result.sort(orderById)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0], { 'id': 1, 'userid': userid, 'due': str(date1), 'title': 'One', 'created': result[0]['created'], 'done': 0 })
+        self.assertEqual(result[1], { 'id': 3, 'userid': userid, 'due': str(date3), 'title': 'Three', 'created': result[1]['created'], 'done': 0 })
+        
+        # Get all again
+        result = getUserItems(userid)
+        result.sort(orderById)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0], { 'id': 1, 'userid': userid, 'due': str(date1), 'title': 'One', 'created': result[0]['created'], 'done': 0 })
+        self.assertEqual(result[1], { 'id': 2, 'userid': userid, 'due': str(date2), 'title': 'Two', 'created': result[1]['created'], 'done': 1 })
+        self.assertEqual(result[2], { 'id': 3, 'userid': userid, 'due': str(date3), 'title': 'Three', 'created': result[2]['created'], 'done': 0 })
+        
+        # Incomplete a task
+        result = completeItem(2, False)
+        self.assertEqual(result, { })
+        
+        # Make sure task was incompleted
+        result = getUserItems(userid)
+        result.sort(orderById)
         self.assertEqual(len(result), 3)
         self.assertEqual(result[0], { 'id': 1, 'userid': userid, 'due': str(date1), 'title': 'One', 'created': result[0]['created'], 'done': 0 })
         self.assertEqual(result[1], { 'id': 2, 'userid': userid, 'due': str(date2), 'title': 'Two', 'created': result[1]['created'], 'done': 0 })
