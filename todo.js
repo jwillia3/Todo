@@ -122,7 +122,7 @@ function ui_setup() {
     $('#minute').html(output.join('\n'));
 
     $('#errorOK').click(function() {
-        $('#shade').show();
+        $('#shade').hide();
         $('#errorBox').hide();
     });
     

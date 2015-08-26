@@ -36,6 +36,11 @@ def rowToHash(row):
 def addUser(name, email):
     global db
     name = name.decode('utf-8') if type(name) is str else name;
+    if not name:
+        return { 'error': 'Name cannot be blank' }
+    if '@' not in email:
+        return { 'error': 'Not a valid e-mail address' }
+    
     try:
         c = db.execute("INSERT INTO user VALUES(NULL, ?, ?)", (name, email));
         db.commit()
@@ -44,16 +49,26 @@ def addUser(name, email):
         return { 'error': 'E-mail already registered' }
 def getUserFromEmail(email):
     global db
+    if not email:
+        return { 'error': 'E-mail cannot be blank' }
     row = db.execute("SELECT * FROM user WHERE email=?", (email,)).fetchone()
     return rowToHash(row) if row else { 'error': email + ' is not registered' }
 def addItem(user, due, title):
     global db
+    if not user:
+        return { 'error': 'User cannot be blank' }
+    if not due:
+        return { 'error': 'Due date cannot be blank' }
+    if not title:
+        return { 'error': 'Title cannot be blank' }
     c = db.execute("INSERT INTO item VALUES(NULL, ?, ?, ?, CURRENT_TIMESTAMP, 0)",
         (user, due, title))
     db.commit()
     return { 'id': c.lastrowid }
 def getUserItems(user, done=None):
     global db
+    if not user:
+        return { 'error': 'User cannot be blank' }
     sql = "SELECT * FROM item WHERE userid=?"
     if done != None:
         sql += ' AND done = ' + ('1' if done else '0')
@@ -61,6 +76,8 @@ def getUserItems(user, done=None):
     return [rowToHash(row) for row in rows]
 def completeItem(id, done=True):
     global db
+    if not id:
+        return { 'error': 'ID cannot be blank' }
     c = db.execute("UPDATE item SET done = "  + ('1' if done else '0') + " WHERE id=?", (id,))
     db.commit()
     return { 'id': id } if c.rowcount == 1 else { 'error': 'Item does not exist' }
@@ -101,6 +118,14 @@ class Tests(unittest.TestCase):
         # Unicode name
         result = addUser('Démö', 'demo2@example.com')
         self.assertEqual(result['id'], 2)
+        
+        # No name
+        result = addUser('', 'demo@example.com')
+        self.assertTrue('error' in result)
+        
+        # Bad e-mail
+        result = addUser('Demo', 'demoexample.com')
+        self.assertTrue('error' in result)
     
     def test_getUserFromEmail(self):
         result = addUser('Démö', 'demo@example.com')
@@ -119,6 +144,8 @@ class Tests(unittest.TestCase):
         
         result = getUserFromEmail('noone@example.com')
         self.assertTrue('error' in result)
+        
+        self.assertTrue('error' in getUserFromEmail(None))
     
     def test_addItem(self):
         result = addUser('Démö', 'demo@example.com')
@@ -130,6 +157,11 @@ class Tests(unittest.TestCase):
         self.assertEqual(result, { 'id': 2 })
         result = addItem(userid, datetime.datetime.utcnow(), 'Two')
         self.assertEqual(result, { 'id': 3 })
+        
+        # Bad input
+        self.assertTrue('error' in addItem(None, datetime.datetime.utcnow(), 'Example'))
+        self.assertTrue('error' in addItem(userid, None, 'Example'))
+        self.assertTrue('error' in addItem(userid, datetime.datetime.utcnow(), None))
     
     def test_completeItem(self):
         result = addUser('Démö', 'demo@example.com')
@@ -143,6 +175,8 @@ class Tests(unittest.TestCase):
         
         result = completeItem(2)
         self.assertTrue('error' in result)
+        
+        self.assertTrue('error' in completeItem(None))
         
     
     def test_getUserItems(self):
@@ -205,6 +239,8 @@ class Tests(unittest.TestCase):
         self.assertEqual(result[0], { 'id': 1, 'userid': userid, 'due': str(date1), 'title': 'One', 'created': result[0]['created'], 'done': 0 })
         self.assertEqual(result[1], { 'id': 2, 'userid': userid, 'due': str(date2), 'title': 'Two', 'created': result[1]['created'], 'done': 0 })
         self.assertEqual(result[2], { 'id': 3, 'userid': userid, 'due': str(date3), 'title': 'Three', 'created': result[2]['created'], 'done': 0 })
+        
+        self.assertTrue('error' in getUserItems(None))
     
     def test_dispatch(self):
         result = dispatch({ 'action': 'addUser', 'email': 'demo@example.com', 'name': 'Démö' })
