@@ -11,9 +11,12 @@
 import sqlite3
 import unittest
 import datetime
+import os
 import json
+import urlparse
 
 db = None
+cwd = os.path.dirname(os.path.realpath(__file__))
 actionWhitelist = ('addUser', 'getUserFromEmail', 'addItem', 'getUserItems', 'completeItem')
 
 def openDatabase(name):
@@ -35,6 +38,7 @@ def addUser(name, email):
     name = name.decode('utf-8') if type(name) is str else name;
     try:
         c = db.execute("INSERT INTO user VALUES(NULL, ?, ?)", (name, email));
+        db.commit()
         return { 'id': c.lastrowid }
     except sqlite3.IntegrityError as e:
         return { 'error': 'E-mail already registered' }
@@ -46,6 +50,7 @@ def addItem(user, due, title):
     global db
     c = db.execute("INSERT INTO item VALUES(NULL, ?, ?, ?, CURRENT_TIMESTAMP, 0)",
         (user, due, title))
+    db.commit()
     return { 'id': c.lastrowid }
 def getUserItems(user, done=None):
     global db
@@ -57,6 +62,7 @@ def getUserItems(user, done=None):
 def completeItem(id, done=True):
     global db
     c = db.execute("UPDATE item SET done = "  + ('1' if done else '0') + " WHERE id=?", (id,))
+    db.commit()
     return { 'id': id } if c.rowcount == 1 else { 'error': 'Item does not exist' }
 
 def dispatch(request):
@@ -81,6 +87,7 @@ class Tests(unittest.TestCase):
             script = file.read()
             c = db.cursor()
             c.executescript(script)
+            db.commit()
             c.close()
         
     def test_addUser(self):
@@ -222,8 +229,40 @@ class Tests(unittest.TestCase):
         self.assertTrue('id' in dispatch({ 'action': 'addItem', 'user': 1, 'title': 'Three', 'due': datetime.datetime.utcnow() }))
         self.assertEqual(3, len(dispatch({ 'action': 'getUserItems', 'user': 1, 'done': None })))
         self.assertTrue('id' in dispatch({ 'action': 'completeItem', 'id': 2, 'done': True }))
+
+def application(environ, start_response):
+    status = '200 OK'
+    output = ''
+    
+    request = urlparse.parse_qs(environ['QUERY_STRING'])
+    request = request['json'][0] if 'json' in request else None
+    try:
+        request = json.loads(request) if request else None
+    except ValueError:
+        request = None
         
+    if request:
+        global db
+        try:
+            openDatabase(os.path.join(cwd, 'todo.db'))
+            output = dispatch(request)
+        except sqlite3.OperationalError as e:
+            print(e)
+            output = { 'error': 'Database error' }
+        finally:
+            if db:
+                db.close()
+    else:
+        output = { 'error': 'Invalid JSON' }
+    
+    if type(output) is not str:
+        output = json.dumps(output)
+    start_response(status, [
+        ('Content-Type', 'text/plain'),
+        ('Content-Length', str(len(output))),
+        ])
+    return output
+    
 
 if __name__ == '__main__':
     unittest.main()
-    
