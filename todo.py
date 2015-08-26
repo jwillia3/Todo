@@ -11,8 +11,10 @@
 import sqlite3
 import unittest
 import datetime
+import json
 
 db = None
+actionWhitelist = ('addUser', 'getUserFromEmail', 'addItem', 'getUserItems', 'completeItem')
 
 def openDatabase(name):
     global db
@@ -36,7 +38,7 @@ def addUser(name, email):
         return { 'id': c.lastrowid }
     except sqlite3.IntegrityError as e:
         return { 'error': 'E-mail already registered' }
-def userFromEmail(email):
+def getUserFromEmail(email):
     global db
     row = db.execute("SELECT * FROM user WHERE email=?", (email,)).fetchone()
     return rowToHash(row) if row else { 'error': email + ' is not registered' }
@@ -55,7 +57,21 @@ def getUserItems(user, done=None):
 def completeItem(id, done=True):
     global db
     c = db.execute("UPDATE item SET done = "  + ('1' if done else '0') + " WHERE id=?", (id,))
-    return { } if c.rowcount == 1 else { 'error': 'Item does not exist' }
+    return { 'id': id } if c.rowcount == 1 else { 'error': 'Item does not exist' }
+
+def dispatch(request):
+    global actionWhitelist
+    if request['action'] not in actionWhitelist:
+        return { 'error': 'Action is not supported' }
+    
+    func = globals()[request['action']]
+    del request['action']
+    params = set(func.func_code.co_varnames[:func.func_code.co_argcount])
+    if params != set(request.keys()):
+        return { 'error': 'Missing or extra arguments' }
+    
+    return func(**request)
+
 
 class Tests(unittest.TestCase):
     def setUp(self):
@@ -79,22 +95,22 @@ class Tests(unittest.TestCase):
         result = addUser('Démö', 'demo2@example.com')
         self.assertEqual(result['id'], 2)
     
-    def test_userFromEmail(self):
+    def test_getUserFromEmail(self):
         result = addUser('Démö', 'demo@example.com')
         self.assertEqual(result['id'], 1)
         addUser('Obstruction', 'obstruction@example.com')
         
-        result = userFromEmail('demo@example.com')
+        result = getUserFromEmail('demo@example.com')
         self.assertEqual(result['id'], 1)
         self.assertEqual(result['name'], u'Démö') # Comes back as Unicode
         self.assertEqual(result['email'], 'demo@example.com')
         
-        result = userFromEmail('obstruction@example.com')
+        result = getUserFromEmail('obstruction@example.com')
         self.assertEqual(result['id'], 2)
         self.assertEqual(result['name'], 'Obstruction')
         self.assertEqual(result['email'], 'obstruction@example.com')
         
-        result = userFromEmail('noone@example.com')
+        result = getUserFromEmail('noone@example.com')
         self.assertTrue('error' in result)
     
     def test_addItem(self):
@@ -116,7 +132,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(result, { 'id': 1 })
         
         result = completeItem(1)
-        self.assertEqual(result, { })
+        self.assertEqual(result, { 'id': 1 })
         
         result = completeItem(2)
         self.assertTrue('error' in result)
@@ -148,7 +164,7 @@ class Tests(unittest.TestCase):
         
         # Complete a task
         result = completeItem(2)
-        self.assertEqual(result, { })
+        self.assertEqual(result, { 'id': 2 })
         
         # Get complete
         result = getUserItems(userid, True)
@@ -173,7 +189,7 @@ class Tests(unittest.TestCase):
         
         # Incomplete a task
         result = completeItem(2, False)
-        self.assertEqual(result, { })
+        self.assertEqual(result, { 'id': 2 })
         
         # Make sure task was incompleted
         result = getUserItems(userid)
@@ -182,6 +198,30 @@ class Tests(unittest.TestCase):
         self.assertEqual(result[0], { 'id': 1, 'userid': userid, 'due': str(date1), 'title': 'One', 'created': result[0]['created'], 'done': 0 })
         self.assertEqual(result[1], { 'id': 2, 'userid': userid, 'due': str(date2), 'title': 'Two', 'created': result[1]['created'], 'done': 0 })
         self.assertEqual(result[2], { 'id': 3, 'userid': userid, 'due': str(date3), 'title': 'Three', 'created': result[2]['created'], 'done': 0 })
+    
+    def test_dispatch(self):
+        result = dispatch({ 'action': 'addUser', 'email': 'demo@example.com', 'name': 'Démö' })
+        self.assertEqual(result['id'], 1)
+        
+        # Missing arg
+        result = dispatch({ 'action': 'addUser', 'email': 'demo3@example.com' })
+        self.assertTrue('error' in result)
+        
+        # Too many args
+        result = dispatch({ 'action': 'addUser', 'email': 'demo4@example.com', 'name': 'Démö', 'bad': None })
+        self.assertTrue('error' in result)
+        
+        # Non-whitelisted action
+        self.assertTrue('id' not in dispatch({ 'action': 'openDatabase', 'name': ':memory:' }))
+        
+        # Test dispatch of all whitelisted
+        self.assertTrue('id' in dispatch({ 'action': 'addUser', 'email': 'demo2@example.com', 'name': 'Démöstætion' }))
+        self.assertTrue('id' in dispatch({ 'action': 'getUserFromEmail', 'email': 'demo@example.com' }))
+        self.assertTrue('id' in dispatch({ 'action': 'addItem', 'user': 1, 'title': 'One', 'due': datetime.datetime.utcnow() }))
+        self.assertTrue('id' in dispatch({ 'action': 'addItem', 'user': 1, 'title': 'Two', 'due': datetime.datetime.utcnow() }))
+        self.assertTrue('id' in dispatch({ 'action': 'addItem', 'user': 1, 'title': 'Three', 'due': datetime.datetime.utcnow() }))
+        self.assertEqual(3, len(dispatch({ 'action': 'getUserItems', 'user': 1, 'done': None })))
+        self.assertTrue('id' in dispatch({ 'action': 'completeItem', 'id': 2, 'done': True }))
         
 
 if __name__ == '__main__':
